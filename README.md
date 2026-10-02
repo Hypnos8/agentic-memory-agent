@@ -54,6 +54,48 @@ and [tool calling](https://openrouter.ai/docs/guides/features/tool-calling).
 
 ## Trajectory logging
 
+### Local web viewer
+
+Run from the repository root:
+
+```sh
+python -m telemetry.web
+```
+
+Open `http://127.0.0.1:8000` in your browser. The German-language viewer shows
+the latest runs first, with questions, answers, metrics, and expandable model/tool
+interactions. Click **Aktualisieren** to read newly appended records. Missing or
+empty logs show an empty state; malformed lines are skipped with their line
+numbers displayed. The viewer reads logs without modifying them and needs no
+additional packages or API credentials. Stop it with Ctrl+C.
+
+Optional port and log file:
+
+```sh
+python -m telemetry.web --port 8080 --log-path logs/experiment_01.jsonl
+```
+
+The default log path is project-relative, regardless of the working directory;
+an explicit relative `--log-path` is relative to the working directory. The
+server listens only on localhost. No change to `main.py` is needed.
+
+### Record format
+
+Memory logging records `memory_strategy` (the store name) and
+`retrieved_memories`: complete experience snapshots in retrieval order, including
+ID, content, source task ID, ISO-8601 creation time, and metadata. The events
+`memory_retrieve` and `memory_retrieve_result`/`memory_retrieve_error` capture the
+question, requested `k=5`, result count, retrieval duration, and failures.
+Retrieval errors produce a failed run record before the original exception is
+re-raised. Existing secret redaction also applies to memory data.
+
+The viewer's **Memory** section distinguishes the `no_memory` baseline from a
+store that returns no matches. Older records without retrieval events show
+unavailable memory data. The exact inserted memory prompt is retained in
+`messages` and visible under **Gespräch**. Retrieved context does not prove the
+model used it or improved its answer; a run can reach its limit before any LLM
+call. This logging change does not create or store new experiences.
+
 Every `AgentRunner.run()` appends one UTF-8 JSON line to
 `logs/trajectories.jsonl`, resolved relative to the project directory. The parent
 directory is created automatically and generated logs are ignored by Git.

@@ -31,3 +31,7 @@ class RunRecord:
     events: list[dict[str, Any]] = field(default_factory=list)
     configuration: dict[str, Any] = field(default_factory=dict)
     error: dict[str, str] | None = None
+    memory_strategy: str = "none"
+    retrieved_memories: list[dict[str, Any]] = field(
+        default_factory=list
+    )

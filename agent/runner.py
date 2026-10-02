@@ -11,6 +11,9 @@ from agent.models import (
 
 from agent.prompts import DATA_ANALYSIS_SYSTEM_PROMPT, SYSTEM_PROMPT_VERSION
 from llm.LLMClient import LLMClient
+from memory.NoMemoryStore import NoMemoryStore
+from memory.MemoryStore import MemoryStore
+from memory.models import Experience
 from telemetry.logger import DEFAULT_LOG_PATH, TrajectoryLogger
 from telemetry.models import RunRecord
 from tools.ToolRegistry import ToolRegistry
@@ -18,6 +21,8 @@ from tools.ToolRegistry import ToolRegistry
 class AgentRunner:
     def __init__(self, llm: LLMClient,
                  tool_registry: ToolRegistry,
+                    memory_store: MemoryStore | None = None,
+
                  max_steps: int = 10,
                  max_tool_calls: int = 15,
                  log_path: str | Path = DEFAULT_LOG_PATH):
@@ -26,6 +31,7 @@ class AgentRunner:
         self.max_steps = max_steps
         self.max_tool_calls = max_tool_calls
         self.logger = TrajectoryLogger(log_path)
+        self.memory_store = memory_store or NoMemoryStore()
 
     def run(self, question: str) -> AgentResult:
         started = perf_counter()
@@ -40,6 +46,7 @@ class AgentRunner:
         )
         run_error = None
         try:
+            self._retrieve_memories(state, record)
             record.configuration = {
                 "max_steps": self.max_steps,
                 "max_tool_calls": self.max_tool_calls,
@@ -88,14 +95,49 @@ class AgentRunner:
     def _error(exc: Exception) -> dict[str, str]:
         return {"type": type(exc).__name__, "message": str(exc)}
 
-    def _initialize_state(self, question:str) -> AgentState:
+    def _initialize_state(self, question: str) -> AgentState:
+        messages = [
+            Message(
+                role="system",
+                content=DATA_ANALYSIS_SYSTEM_PROMPT,
+            )
+        ]
+
+        messages.append(
+            Message(
+                role="user",
+                content=question,
+            )
+        )
+
         return AgentState(
             task_id=str(uuid4()),
             user_question=question,
-            messages=[Message(role="system", content=DATA_ANALYSIS_SYSTEM_PROMPT), Message(role="user", content=question)],
-            step_count=0,
-            completed=False,
+            messages=messages,
         )
+
+    def _retrieve_memories(self, state: AgentState, record: RunRecord) -> None:
+        record.memory_strategy = self.memory_store.name
+        record.events.append({"type": "memory_retrieve", "strategy": record.memory_strategy,
+                              "task": state.user_question, "k": 5})
+        started = perf_counter()
+        try:
+            experiences = self.memory_store.retrieve(task=state.user_question, k=5)
+        except Exception as exc:
+            record.events.append({"type": "memory_retrieve_error",
+                                  "duration_seconds": perf_counter() - started,
+                                  "error": self._error(exc)})
+            raise
+        elapsed = perf_counter() - started
+        state.retrieved_experiences = experiences
+        record.retrieved_memories = [
+            {**asdict(experience), "created_at": experience.created_at.isoformat()}
+            for experience in experiences
+        ]
+        record.events.append({"type": "memory_retrieve_result", "count": len(experiences),
+                              "duration_seconds": elapsed})
+        if experiences:
+            state.messages.insert(1, Message(role="system", content=self._format_memories(experiences)))
 
     def _run_step(self, state: AgentState, record: RunRecord) -> None:
         definitions = self.tool_registry.definitions()
@@ -195,3 +237,23 @@ class AgentRunner:
             state.termination_reason = TerminationReason.MAX_TOOL_CALLS
             return False
         return True
+
+    @staticmethod
+    def _format_memories(
+            experiences: list[Experience],
+    ) -> str:
+
+        lines = [
+            "Relevant experiences from previous tasks:",
+            "",
+        ]
+
+        for i, experience in enumerate(
+                experiences,
+                start=1,
+        ):
+            lines.append(
+                f"{i}. {experience.content}"
+            )
+
+        return "\n".join(lines)

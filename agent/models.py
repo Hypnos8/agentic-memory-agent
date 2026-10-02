@@ -2,6 +2,9 @@ from dataclasses import dataclass,field
 from enum import Enum
 from typing import Any
 
+from memory.models import Experience
+
+
 @dataclass
 class Message:
     role: str
@@ -43,6 +46,9 @@ class AgentState:
     final_answer: str | None = None
     input_tokens: int = 0
     output_tokens: int = 0
+    retrieved_experiences: list[Experience] = field(
+        default_factory=list
+    )
 
 @dataclass
 class AgentResult:
