@@ -1,4 +1,5 @@
 from dataclasses import dataclass,field
+from enum import Enum
 from typing import Any
 
 @dataclass
@@ -37,6 +38,7 @@ class AgentState:
     messages: list[Message] = field(default_factory=list)
     step_count: int = 0
     tool_call_count: int = 0
+    termination_reason: TerminationReason | None = None
     completed: bool = False
     final_answer: str | None = None
     input_tokens: int = 0
@@ -52,4 +54,10 @@ class AgentResult:
     tool_calls: int
     input_tokens: int
     output_tokens: int
+    termination_reason: TerminationReason | None
 
+class TerminationReason(str, Enum):
+    COMPLETED = "completed"
+    MAX_STEPS = "max_steps"
+    MAX_TOOL_CALLS = "max_tool_calls"
+    EMPTY_RESPONSE = "empty_response"
