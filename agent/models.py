@@ -57,6 +57,7 @@ class AgentResult:
     termination_reason: TerminationReason | None
 
 class TerminationReason(str, Enum):
+    ERROR = "error"
     COMPLETED = "completed"
     MAX_STEPS = "max_steps"
     MAX_TOOL_CALLS = "max_tool_calls"

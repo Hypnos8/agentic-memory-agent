@@ -52,6 +52,51 @@ automatically retried. Tests mock HTTP and require neither credentials nor credi
 Protocol references: [OpenRouter API](https://openrouter.ai/docs/api/reference/overview)
 and [tool calling](https://openrouter.ai/docs/guides/features/tool-calling).
 
+## Trajectory logging
+
+Every `AgentRunner.run()` appends one UTF-8 JSON line to
+`logs/trajectories.jsonl`, resolved relative to the project directory. The parent
+directory is created automatically and generated logs are ignored by Git.
+Override the destination with `AgentRunner(..., log_path="path/to/runs.jsonl")`.
+
+Each record contains the task ID, question, final answer, success and termination
+reason, elapsed seconds, model, prompt version, token totals, conversation, and
+ordered `events`. Events pair `llm_call` with `llm_response`/`llm_error`, and
+`tool_call` with `tool_result`/`tool_error`. Tool IDs link requests to their
+results, including failures. Model responses retain all requested tool calls,
+even if an execution limit prevents some from running. `message_count` on an
+LLM-call event identifies the input prefix of the recorded conversation.
+
+`llm_calls` and `tool_calls` count attempted invocations, including exceptions;
+`steps` counts returned LLM responses. Input/output tokens accumulate reported
+usage, and `total_tokens` is their sum. Missing usage retains the client's zero
+default. Duration measures the run before writing the log. Reproducibility
+configuration includes execution limits, model, LLM timeout when available,
+tool definitions, database paths, and SQL row limits.
+
+Normal completion, execution limits, empty responses, and exceptions all write
+a record. Unexpected exceptions are logged with termination reason `error` and
+then re-raised. A log-write failure is raised; if the run itself already failed,
+the original exception is preserved with a note about the logging failure.
+
+Credentials and client objects are not serialized. The configured
+`OPENROUTER_API_KEY` is redacted from strings, credential-bearing dictionary
+fields are redacted, and opaque provider metadata is omitted. Redaction applies
+only to the log copy, not to the live conversation. Logging covers runs entering
+`run()`, not setup failures or forced process termination. Concurrent processes
+should use separate log files.
+
+Read records for evaluation using the standard library:
+
+```python
+import json
+
+with open("logs/trajectories.jsonl", encoding="utf-8") as stream:
+    for line in stream:
+        record = json.loads(line)
+        print(record["task_id"], record["termination_reason"], record["total_tokens"])
+```
+
 ## Local demo database
 
 From the repository root, run with Python 3.14 or later:

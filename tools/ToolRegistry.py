@@ -18,6 +18,19 @@ class ToolRegistry:
             for tool in self._tools.values()
         ]
 
+    def logging_configuration(self) -> dict[str, Any]:
+        """Expose only the tool settings needed to reproduce database queries."""
+        configuration = {}
+        for name, tool in self._tools.items():
+            settings = {}
+            database = getattr(tool, "database", None)
+            if database is not None:
+                settings["database_path"] = str(database.db_path.resolve())
+            if hasattr(tool, "max_rows"):
+                settings["max_rows"] = tool.max_rows
+            configuration[name] = settings
+        return configuration
+
     def execute(self, tool_call: ToolCall) -> ToolResult:
         tool = self._tools.get(tool_call.name)
 
