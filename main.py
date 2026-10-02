@@ -1,20 +1,34 @@
-from pathlib import Path
-
+from agent.runner import AgentRunner
 from data.SQLiteDatabase import SQLiteDatabase
+from llm.OpenRouterClient import OpenRouterClient
 from tools.ToolRegistry import ToolRegistry
-from tools.database_tools import ListTablesTool, GetSchemaTool, ExecuteSQLTool
+from tools.database_tools import (
+    ExecuteSQLTool,
+    GetSchemaTool,
+    ListTablesTool,
+)
 
-database = SQLiteDatabase(Path(__file__).resolve().parent / "data" / "demo.sqlite")
+
+database = SQLiteDatabase("data/demo.sqlite")
+
 registry = ToolRegistry()
+registry.register(ListTablesTool(database))
+registry.register(GetSchemaTool(database))
+registry.register(ExecuteSQLTool(database))
 
-registry.register(
-    ListTablesTool(database)
+llm = OpenRouterClient()
+
+runner = AgentRunner(
+    llm=llm,
+    tool_registry=registry,
 )
 
-registry.register(
-    GetSchemaTool(database)
+result = runner.run(
+    "Which customer segment had the largest decline "
+    "in average satisfaction from 2024 to 2025?"
 )
 
-registry.register(
-    ExecuteSQLTool(database)
-)
+print(result.final_answer)
+print("Steps:", result.steps)
+print("Tool calls:", result.tool_calls)
+print("Tokens:", result.input_tokens + result.output_tokens)
